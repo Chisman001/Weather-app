@@ -1,0 +1,148 @@
+---
+alwaysApply: true
+---
+
+## Stack & Versions
+
+- **Framework**: Next.js 14 (App Router, React Server Components by default).
+- **Language**: TypeScript (strict mode enabled).
+- **Styling**: TailwindCSS (no other global CSS frameworks).
+- **Backend-as-a-Service**: Supabase (Auth, DB, Storage, Edge Functions for heavy/secure work).
+- **Runtime**: Prefer Node.js runtime unless a specific API route clearly benefits from Edge.
+
+---
+
+## Project & File Conventions
+
+- **Component filenames**: Always use kebab-case, e.g. `current-conditions-card.tsx`, `forecast-list.tsx`.
+- **App router structure**:
+  - Route segments in `app/` reflect features, e.g.:
+    - `app/(weather)/current/page.tsx` (current location weather)
+    - `app/(weather)/location/[city]/page.tsx` (city-based weather)
+    - `app/(account)/settings/page.tsx` (user settings).
+- **Server vs client components**:
+  - All `page.tsx`, `layout.tsx`, `loading.tsx`, and most UI components are **server components**.
+  - Only add `'use client'` to **small, isolated, interactive components** (e.g. `temperature-unit-toggle.tsx`, `search-location-input.tsx`).
+- **Shared UI**:
+  - Reuse or extract **shared components** for any repeating UI elements before finishing a task, e.g.:
+    - `components/current-conditions-card.tsx`
+    - `components/hourly-forecast-grid.tsx`
+    - `components/daily-forecast-list.tsx`.
+  - Avoid duplicating markup across pages or routes.
+
+---
+
+## Data Fetching & Architecture
+
+- **Server-first**:
+  - All weather data access happens in **server components** or **server utilities** (e.g. `lib/weather-api.ts`, `lib/supabase-server.ts`).
+  - Client components **never** call third-party weather APIs directly or access Supabase with service keys.
+- **Abstractions**:
+  - Create focused server-side helpers, e.g.:
+    - `lib/get-current-weather.ts`
+    - `lib/get-hourly-forecast.ts`
+    - `lib/get-daily-forecast.ts`
+    - `lib/get-user-preferences.ts`.
+  - Each helper:
+    - Accepts explicit, typed parameters.
+    - Returns typed, validated data (e.g. using Zod or type guards where appropriate).
+- **Caching & performance**:
+  - Use Next.js `fetch` with `cache`, `revalidate`, or `no-store` appropriately:
+    - Current conditions: short `revalidate` (e.g. 60–300 seconds) unless user explicitly requests real-time.
+    - Forecasts (hourly/daily): longer `revalidate` (e.g. 600–1800 seconds), depending on provider limits.
+  - For user-specific data (preferences, saved locations), use **SSR with `no-store`** or correct `revalidate` + auth-aware queries.
+  - Do not prematurely micro-optimize; readability and correctness come first.
+
+---
+
+## Supabase Usage
+
+- **Server-side Supabase client**:
+  - Use a single utility per runtime, e.g. `lib/supabase-server.ts` for server and `lib/supabase-client.ts` for client, initialized via official Supabase helpers.
+  - All privileged operations (e.g. storing API usage, logs, or user preferences) are done on the **server**.
+- **Auth**:
+  - Auth-sensitive routes use server components that read session information on the server.
+  - Protect pages via server-side checks (e.g. redirect in `page.tsx` if unauthenticated rather than doing client-only guards).
+- **Rate limiting / quotas**:
+  - If applicable, centralize any rate-limit tracking or API quota management in Supabase tables with server-only access patterns.
+
+---
+
+## Loading, Error States & Logging
+
+- **Loading states**:
+  - Every data-fetching route in `app/` defines a `loading.tsx` file with **semantic, minimal** skeletons (e.g. `main > section` with skeleton cards).
+  - For client components that fetch additionally (e.g. search or quick refresh), show inline loading indicators (e.g. disabled button, spinner icon).
+- **Error states**:
+  - For each route:
+    - Implement an `error.tsx` component that:
+      - Shows a **clear, user-friendly** message.
+      - Logs the error (see logging rules below).
+  - For client components with internal fetching, always handle:
+    - Network errors
+    - Timeout / aborted requests
+    - Invalid response shape.
+- **Error logging**:
+  - Centralize logging in `lib/logger.ts` with functions like `logError(context, error, extra?)`.
+  - All catches **must**:
+    - Log via `logError(...)`.
+    - Return a safe, typed fallback or propagate a controlled error (never leak secrets or stack traces to the UI).
+- **Fallbacks**:
+  - For weather data errors:
+    - Show partial UI where possible (e.g. “Current data unavailable, showing last known forecast”).
+    - Display safe fallback text instead of breaking layouts.
+
+---
+
+## UI, Accessibility & Semantics
+
+- **Semantic HTML**:
+  - Use:
+    - `header`, `main`, `section`, `article`, `aside`, `footer` appropriately.
+    - `ul`/`li` for lists of days/hours, tables only when truly tabular.
+  - Weather cards use `article`; lists of forecast entries use `section` + `ul`/`li`.
+- **Responsiveness**:
+  - Layout responsive with Tailwind (`grid`, `flex`, `gap`, responsive modifiers).
+  - Ensure main layouts work on small screens first; then scale to larger breakpoints.
+- **Accessibility**:
+  - Use ARIA attributes sparingly and only when needed.
+  - Provide appropriate labels on controls (`aria-label`, `aria-describedby`) for toggles and inputs.
+  - Color choices respect contrast ratios; avoid encoding information by color alone (e.g. add icons or text for alerts).
+
+---
+
+## Client Components & Interactivity
+
+- **When to use `'use client'`**:
+  - Only for:
+    - Interactive controls (unit toggles, search, filters, map interactions).
+    - Lightweight animations or transitions not possible with pure CSS.
+  - Client components must:
+    - Be as small and focused as possible.
+    - Receive all necessary data as **props**; they do not own core data fetching logic unless the feature cannot be server-driven.
+- **State management**:
+  - Prefer React local state, URL search params, or simple context scoped to a small subtree.
+  - Avoid introducing global state libraries unless the app complexity clearly justifies it.
+
+---
+
+## Security & Privacy
+
+- Never expose:
+  - Supabase service keys, third-party weather API keys, or secrets in client bundles or logs.
+- All keys live in **environment variables** and are accessed only where allowed (server-only keys in server context).
+- Sanitize any user-provided locations (search queries, custom labels) before using them in queries or logs.
+
+---
+
+## Testing & Quality
+
+- **Type safety**:
+  - No `any` unless absolutely unavoidable and documented with a clear reason.
+  - Prefer explicit interfaces/types for weather responses and user preferences.
+- **Tests**:
+  - Unit test non-trivial data transformation functions (e.g. unit conversion, “feels like” calculations, alert formatting).
+  - When a test is created only for temporary debugging, delete it once it is no longer needed.
+- **Linting**:
+  - All code must pass ESLint and TypeScript checks with no new warnings.
+  - When fixing bugs, identify the root cause, implement the fix, and verify with linting before considering the issue resolved.

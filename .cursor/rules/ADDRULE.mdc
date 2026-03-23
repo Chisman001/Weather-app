@@ -1,0 +1,184 @@
+---
+alwaysApply: true
+---
+
+1. Tech Stack & Architecture
+Core stack
+Framework: Next.js (App Router, React Server Components first).
+Language: TypeScript (no any except in well-documented escape hatches).
+Styling: Tailwind CSS + Shadcn UI (Radix primitives).
+State/Data: TanStack Query for remote data, Zustand for client global UI state.
+Validation: Zod for all user input, query params, and API responses.
+Architecture
+RSC first: Prefer server components for all data-fetching views.
+Client components: Only for interaction (maps, charts, sliders, drag-and-drop, etc.).
+Feature-based structure:
+app/(marketing)/...
+app/(dashboard)/...
+components/weather-current/, components/weather-forecast/, components/location-picker/, etc.
+lib/api/, lib/weather/, lib/validation/, lib/ui/, etc.
+types/ for shared domain types (weather, locations, alerts, preferences).
+2. Naming, Structure, and File Organization
+Directories
+Use kebab-case for folders: components/current-conditions, features/location-search.
+Files
+Component files in components/ or feature folders:
+Top-level export is the main component.
+Group subcomponents and helpers in the same file if small; otherwise create *-subcomponent.tsx or helpers.ts.
+Naming
+Booleans: isLoading, hasError, shouldRefresh, isSevereWeather.
+Async functions: fetchWeatherByCoords, loadUserPreferences, getForecastSummary.
+Domain clarity: Prefer hourlyForecast, dailyForecast, uvIndex over generic names.
+3. Data Fetching, Caching, and Weather Domain Rules
+Server data fetching
+Use Next.js RSC data functions (async server components, getX helpers in lib/weather/) for primary weather data:
+getCurrentConditions(location: LocationInput)
+getHourlyForecast(location: LocationInput)
+getDailyForecast(location: LocationInput)
+getWeatherAlerts(location: LocationInput)
+Centralize API calls in lib/api/weather-client.ts with:
+Strongly typed responses.
+Zod validation of external API data.
+Consistent error mapping (see custom error types below).
+Caching
+Use fetch with Next.js caching options and/or revalidate for predictable fresh intervals:
+Current conditions: revalidate: 60 (or configurable).
+Hourly: revalidate: 5 * 60.
+Daily: revalidate: 30 * 60.
+For client data (progressive enhancement, refetch-on-focus): use TanStack Query with stable keys:
+['weather', 'current', locationKey]
+['weather', 'hourly', locationKey]
+['weather', 'alerts', locationKey]
+Location handling
+Normalize location into a Location type (e.g. city, lat, lon, country, timezone).
+Derive timezone-aware timestamps on the server using a dedicated utility (lib/weather/time.ts).
+4. State Management Guidelines
+Global state (Zustand)
+Use for UI concerns and user preferences, not core weather data:
+Selected location.
+Temperature unit (C/F), wind speed units, theme (light/dark/system).
+Visible panels (e.g. radar vs forecast, chart toggles).
+No API calls inside Zustand stores. Instead:
+Read/write preferences.
+Let components use TanStack Query for network data.
+Local state
+Prefer useState and useReducer for local UI-only state in client components.
+Avoid “global everything” – scope state to the smallest useful context.
+5. Client vs Server Components
+Default: Server Component
+Pages showing weather data but with simple interaction (<Link> navigation, simple filters passed via URL) stay on the server.
+Use URL searchParams or segment config for filters (units, language, view).
+Client Component only when needed
+Interactions requiring real-time updates, browser APIs, or complex transitions:
+Geolocation access.
+Dragable map / radar.
+Interactive charts (zoom/hover).
+Client-side search/autocomplete for locations.
+In client components:
+Keep them small and focused.
+Prefer hooks for complex behavior: useLocationSearch, useRadarInteraction.
+6. Performance and Optimization
+Dynamic imports
+Use next/dynamic for heavy/rarely-used UI:
+Charts, radar maps, 3D visualizations, advanced analytics.
+Example: const WeatherRadar = dynamic(() => import('@/components/weather-radar'), { ssr: false, loading: SkeletonRadar }).
+Images
+Use next/image with:
+WebP-first where possible.
+Explicit width/height and sizes.
+placeholder="blur" for hero images; loading="lazy" for below-the-fold content.
+Bundle hygiene
+Avoid importing large libs into RSC and client components unnecessarily.
+Share pure helpers via lib/ (pure TS) instead of re-implementing logic.
+Rendering
+Memoize expensive client subtrees (React.memo, useMemo, useCallback) but only when profiling shows benefit.
+Co-locate expensive computations in RSC or on the server.
+7. Error Handling, Validation, and Custom Errors
+Zod schemas
+All external inputs must be validated:
+Weather API responses.
+Query params: location, units, language.
+User settings forms, feedback, alerts configuration.
+Store schemas in lib/validation/ and reuse across server and client.
+Custom errors
+Use domain-specific error types in lib/errors.ts:
+WeatherApiError
+LocationValidationError
+RateLimitError
+UnexpectedWeatherDataError
+Ensure each has:
+name, message, optional code, and optional cause.
+Guard clauses / early returns
+Always validate preconditions at the top of a function (if (!location) return ...).
+Fail fast where input or environment is invalid.
+User-facing error UX
+Use shared components for errors and empty states, e.g.:
+ErrorState
+EmptyState
+RetryBanner
+Map technical errors to user-friendly messages with safe detail.
+8. UI/UX and Design System
+Design system
+Use Shadcn UI components as base primitives and wrap into weather-specific components when they repeat:
+WeatherCard, MetricBadge, AlertTag, TimelineRow.
+Whenever markup repeats between pages, refactor into shared components before closing the task (your own rule).
+Responsiveness
+Mobile-first Tailwind: flex, grid, gap, space-y-*.
+Ensure critical weather info (current conditions, alerts) is immediately visible on small screens.
+Accessibility
+Use Radix primitives where appropriate for focus management.
+Add semantic roles and ARIA for interactive charts and maps when needed (e.g., summary text for screen readers).
+Dark mode
+Support system-dark-mode with a toggle using Shadcn theme helpers and Tailwind classes.
+9. Security & Reliability
+Secrets
+Weather API keys, geocoding keys, and analytics keys must live in .env or platform secrets; never committed.
+Input safety
+Sanitize all text inputs that may appear in UI or logs.
+Rate-limit high-frequency operations (location search, geolocation-based refresh) on the server.
+Network robustness
+Timeouts and retries for weather API calls with backoff (e.g. using AbortController or fetch wrappers).
+Graceful degradation when an API is unavailable:
+Fallback to cached data when available.
+Clear, non-blocking messaging to the user.
+10. Testing Strategy
+Unit tests
+Use Jest + React Testing Library.
+Focus on:
+Domain logic (lib/weather/ – temperature conversion, feels-like, condition classification).
+Validation schemas (lib/validation/ – query params, API responses).
+Components with nontrivial logic (derived states, edge cases, severe weather).
+Integration tests
+For critical flows (e.g. “search city → see current + hourly forecast + alerts”).
+Naming & structure
+Tests colocated as *.test.ts / *.test.tsx.
+Use descriptive test names and minimal mocking of external APIs.
+Temporary tests
+If you create throwaway/test files for investigation, delete them once no longer needed (per your rule).
+11. Documentation & Comments
+Component documentation
+Use minimal but clear JSDoc for exported hooks, helpers, and critical components:
+What the function does.
+What inputs/outputs are (especially around weather domain).
+Any non-obvious assumptions (timezones, units, fallback strategy).
+Complex logic only
+Only comment when the logic is non-trivial (e.g., computing storm severity index, merging multiple API sources).
+Do not narrate obvious code.
+12. Working Methodology for New Features
+When implementing or refactoring a feature (e.g. new “Air Quality” panel, “Storm Tracker”, “Feels Like” timeline):
+
+Analysis
+Identify required data (from weather API or separate service), validation schemas, and new domain types.
+Plan
+Sketch the RSC entry point, client subcomponents, and required hooks/helpers.
+Implement
+Start from lib/api + lib/validation + types.
+Create or extend RSC page/segment.
+Add minimal client components as needed (charts, radar, etc.) using dynamic import.
+Review & Optimize
+Check for duplication and refactor into shared components.
+Check bundle size impact (avoid unnecessary client imports).
+Confirm Zod schemas and error handling paths.
+Test & Document
+Add/extend unit tests.
+Add/adjust JSDoc and any non-obvious comments.
