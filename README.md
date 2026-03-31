@@ -2,7 +2,7 @@
 
 A weather forecast app built with Next.js 14, Open-Meteo API, and Leaflet maps.
 
-**Live:** task-manager-fjkv.vercel.app
+**Live:** [https://castfor-weather-app](https://weather-app-rho-three-46.vercel.app/)
 
 ## Features
 
