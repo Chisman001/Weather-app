@@ -2,6 +2,8 @@
 
 A weather forecast app built with Next.js 14, Open-Meteo API, and Leaflet maps.
 
+**Live:** task-manager-fjkv.vercel.app
+
 ## Features
 
 - **Home**: Current conditions, today's highlights (UV, wind, humidity, visibility, sunrise/sunset, pressure), 7-day forecast, mini map preview
