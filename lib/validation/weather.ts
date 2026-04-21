@@ -89,3 +89,18 @@ export const GeocodingApiSchema = z.object({
 });
 
 export type LocationInput = z.infer<typeof LocationInputSchema>;
+
+export const NominatimReverseSchema = z.object({
+  address: z.object({
+    city: z.string().optional(),
+    town: z.string().optional(),
+    village: z.string().optional(),
+    country_code: z.string().default(''),
+    country: z.string().optional(),
+  }),
+  display_name: z.string().optional(),
+});
+
+export const OpenMeteoTimezoneSchema = z.object({
+  timezone: z.string(),
+});
