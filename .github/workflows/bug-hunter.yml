@@ -1,0 +1,11 @@
+name: Bug Hunter
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  use-bug-hunter:
+    uses: Chisman001/bug-hunter-workflow/.github/workflows/bug-hunter.yml@main
+    with:
+      fail_on_critical: true
